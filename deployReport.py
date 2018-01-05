@@ -1,5 +1,5 @@
 #! /Users/jayden/anaconda2/envs/py36/bin/python
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 import requests
 import smtplib
@@ -18,53 +18,59 @@ r = requests.get(
     auth=(conf_jira['user'], conf_jira['password'])
 )
 issue_results = r.json()
-now = datetime.now()
 
-body = '<p>Hi Team, </p>'
+if len(issue_results['issues']) > 0:
+    now = datetime.now()
 
-body += '<style>' \
-       '    .td-title {' \
-       '        padding: 8px; ' \
-       '        background: #ddd; ' \
-       '        font-weight: bold;' \
-       '    } ' \
-       '    .td-normal {' \
-       '        padding: 8px;' \
-       '    }' \
-       '</style>' \
+    body = '<p>Hi Team, </p>'
 
-body += '<p>Here are the tasks that have been released for Week ' + now.strftime('%W') + '.</p>'
+    body += '<style>' \
+            '    .td-title {' \
+            '        padding: 8px; ' \
+            '        background: #ddd; ' \
+            '        font-weight: bold;' \
+            '    } ' \
+            '    .td-normal {' \
+            '        padding: 8px;' \
+            '    }' \
+            '</style>' \
 
-body += '<table>'
-body += '<thead><tr><td class="td-title">Key</td><td class="td-title">Summary</td></tr></thead>'
-body += '<tbody>'
-for issue in issue_results['issues']:
-    issue_key = issue['key']
-    issue_summary = issue['fields']['summary']
-    body += '<tr>'
-    body += '<td class="td-normal"><a href="' + jira_base_url + issue_key + '">' + issue_key + '</a></td>'
-    body += '<td class="td-normal"><a href="' + jira_base_url + issue_key + '">' + issue_summary + '</a></td>'
-    body += '</tr>'
+    body += '<p>Here are the tasks that have been released for Week ' + now.strftime('%W') + '.</p>'
 
-body += '<tbody></table>'
-body += '<p>Regards<br/>Jayden Chua</p>'
+    body += '<table>'
+    body += '<thead><tr><td class="td-title">Key</td><td class="td-title">Summary</td></tr></thead>'
+    body += '<tbody>'
 
-fromaddr = config["user"]["email"]
-toaddr = config["user"]["email"]
+    for issue in issue_results['issues']:
+        issue_key = issue['key']
+        issue_summary = issue['fields']['summary']
+        body += '<tr>'
+        body += '<td class="td-normal"><a href="' + jira_base_url + issue_key + '">' + issue_key + '</a></td>'
+        body += '<td class="td-normal"><a href="' + jira_base_url + issue_key + '">' + issue_summary + '</a></td>'
+        body += '</tr>'
 
-msg = MIMEMultipart()
+    body += '<tbody></table>'
+    body += '<p>Regards<br/>Jayden Chua</p>'
 
-msg['From'] = config["user"]["email"]
-msg['To'] = config["report"]["deployment"]["emailTo"]
-msg['Cc'] = config["report"]["deployment"]["emailCc"]
+    fromaddr = config["user"]["email"]
+    toaddr = config["report"]["deployment"]["emailTo"]
 
-msg['Subject'] = 'Deployed Tasks for Week ' + now.strftime('%W [%d %b %Y]')
+    msg = MIMEMultipart()
 
-msg.attach(MIMEText(body, 'html'))
+    msg['From'] = fromaddr
+    msg['To'] = toaddr
+    msg['Cc'] = config["report"]["deployment"]["emailCc"]
 
-server = smtplib.SMTP(config["smtp"]["server"], config["smtp"]["server_port"])
-server.starttls()
-server.login(fromaddr, config["smtp"]["password"])
-text = msg.as_string()
-server.sendmail(fromaddr, toaddr, text)
-server.quit()
+    msg['Subject'] = 'Deployed Tasks for Week ' + now.strftime('%W [%d %b %Y]')
+
+    msg.attach(MIMEText(body, 'html'))
+
+    server = smtplib.SMTP(config["smtp"]["server"], config["smtp"]["server_port"])
+    server.starttls()
+    server.login(fromaddr, config["smtp"]["password"])
+    text = msg.as_string()
+    server.sendmail(fromaddr, toaddr, text)
+    server.quit()
+    print('Email Sent!')
+else:
+    print('No Tasks Deployed')
