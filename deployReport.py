@@ -33,7 +33,7 @@ body += '<style>' \
        '    }' \
        '</style>' \
 
-body += '<p>Here are the tasks that has been released for Week ' + now.strftime('%W') + '.</p>'
+body += '<p>Here are the tasks that have been released for Week ' + now.strftime('%W') + '.</p>'
 
 body += '<table>'
 body += '<thead><tr><td class="td-title">Key</td><td class="td-title">Summary</td></tr></thead>'
