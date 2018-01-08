@@ -35,7 +35,7 @@ if len(issue_results['issues']) > 0:
             '    }' \
             '</style>' \
 
-    body += '<p>Here are the tasks that have been released for Week ' + now.strftime('%W') + '.</p>'
+    body += '<p>Here are the tasks that have been released for Week {}.</p>'.format(now.strftime('%W'))
 
     body += '<table>'
     body += '<thead><tr><td class="td-title">Key</td><td class="td-title">Summary</td></tr></thead>'
@@ -45,8 +45,8 @@ if len(issue_results['issues']) > 0:
         issue_key = issue['key']
         issue_summary = issue['fields']['summary']
         body += '<tr>'
-        body += '<td class="td-normal"><a href="' + jira_base_url + issue_key + '">' + issue_key + '</a></td>'
-        body += '<td class="td-normal"><a href="' + jira_base_url + issue_key + '">' + issue_summary + '</a></td>'
+        body += '<td class="td-normal"><a href="{0}{1}">{1}</a></td>'.format(jira_base_url, issue_key)
+        body += '<td class="td-normal"><a href="{0}{1}">{2}</a></td>'.format(jira_base_url, issue_key, issue_summary)
         body += '</tr>'
 
     body += '<tbody></table>'
