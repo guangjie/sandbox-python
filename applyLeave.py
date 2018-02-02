@@ -11,7 +11,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 
-DEV_MODE = True
+DEV_MODE = False
 
 
 def main():
