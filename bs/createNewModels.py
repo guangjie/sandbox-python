@@ -50,7 +50,7 @@ def main():
 
     answer_parent_model = inquirer.prompt(question_parent_model)
 
-    cursor = db_connection.cursor();
+    cursor = db_connection.cursor()
 
     sql = "SELECT `id` " \
           "FROM `mdx_kfz`.`mdx_kfz_models` " \
