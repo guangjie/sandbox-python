@@ -2,6 +2,7 @@ import json
 import inquirer
 import pymysql
 
+
 def main():
     with open('../config.json') as json_data_file:
         config = json.load(json_data_file)
@@ -13,99 +14,34 @@ def main():
 
     output_sql = ''
 
-    app_question = [
-        inquirer.Text(
-            'car_brand',
-            message="What is the Brand of Car?"
-        )
-    ]
+    car_brand = input_car_brand()
 
-    app_answer = inquirer.prompt(app_question)
+    db_connection = get_database_connection(config)
 
-    while app_answer['car_brand'] == '':
-        app_answer = inquirer.prompt(app_question)
+    possible_car_brands = get_possible_car_brands_from_db(db_connection, car_brand)
 
-    conn_params = config['mysql']
+    exact_car_brand_id = get_exact_car_brand_id(possible_car_brands)
 
-    conn = pymysql.connect(
-        host=conn_params['host'],
-        user=conn_params['user'],
-        password=conn_params['password'],
-        # db=conn_params['db'],
-        port=conn_params['port']
-    )
+    output_sql += 'SET @HertzId = ' + exact_car_brand_id + ';' + "\n"
 
-    cursor = conn.cursor()
-    sql = 'SELECT `id`, `name` FROM `mdx_kfz`.`mdx_kfz_herst` ' \
-          'WHERE `name` ' \
-          'LIKE "%' + app_answer["car_brand"] + '%";'
+    comma_separated_car_countries = input_car_countries()
 
-    cursor.execute(sql)
-    result = cursor.fetchall()
+    possible_countries = get_possible_car_countries_from_db(db_connection, comma_separated_car_countries)
 
-    # print(result)
-
-    brand_choices = []
-    brand_dict = {}
-
-    for row in result:
-        brand_choices.append(row[1])
-        brand_dict[row[1]] = row[0]
-
-    app_question = [inquirer.List(
-        'car_brand',
-        message="Which is the Brand of Car?",
-        choices=brand_choices
-    )]
-
-    app_answer = inquirer.prompt(app_question)
-
-    output_sql += 'SET @HertzId = ' + str(brand_dict[app_answer['car_brand']]) + ';' + "\n"
-
-    app_question = [inquirer.Text(
-        'car_countries',
-        message="Which countries would you like to add? Comma seperated for multiple values."
-    )]
-
-    app_answer = inquirer.prompt(app_question)
-
-    countries_ans = app_answer["car_countries"].replace(',', '|')
-    if countries_ans == '':
-        countries_ans = 'China'
-
-    sql = "SELECT `id`, `name` " \
-          "FROM `mdxcnt`.`mdx_countries` " \
-          "WHERE `name` REGEXP '" + countries_ans + "' OR `iso` REGEXP '" + countries_ans + "' OR `iso3` REGEXP '" + countries_ans + "';"
-    cursor.execute(sql)
-    possible_countries = cursor.fetchall()
-
-    country_choices = []
-    country_dict = {}
-
-    for possible_country in possible_countries:
-        country_choices.append(possible_country[1])
-        country_dict[possible_country[1]] = possible_country[0]
-
-    app_question = [inquirer.Checkbox(
-        'car_countries',
-        message="Which countries will have these models?",
-        choices=country_choices
-    )]
-
-    app_answer = inquirer.prompt(app_question)
+    exact_car_countries = get_exact_car_country_ids(possible_countries)
 
     country_sql = ''
 
-    for selected_country in app_answer["car_countries"]:
-        output_sql += 'SET @CountryId' + str(selected_country) + ' = ' + str(country_dict[selected_country]) + ";\n"
+    for selected_country in exact_car_countries:
+        output_sql += 'SET @CountryId' + selected_country['selection'] + ' = ' + selected_country['value'] + ";\n"
         country_sql += 'INSERT INTO `mdx_kfz_model_countries` (`id`, `countryId`) ' + "\n" \
-                       'SELECT * FROM (SELECT @ModelId, @CountryId' + str(selected_country).replace(' ', '') + ') AS tmp ' + "\n" \
+                       'SELECT * FROM (SELECT @ModelId, @CountryId' + selected_country['selection'].replace(' ', '') + ') AS tmp ' + "\n" \
                        'WHERE NOT EXISTS (' + "\n" \
-                            "\t" + 'SELECT `id` FROM `mdx_kfz_model_countries` WHERE `id` = @ModelId AND `countryId` = @CountryId' + str(selected_country).replace(' ', '') + "\n"\
+                            "\t" + 'SELECT `id` FROM `mdx_kfz_model_countries` WHERE `id` = @ModelId AND `countryId` = @CountryId' + selected_country['selection'].replace(' ', '') + "\n"\
                        ') LIMIT 1;' + "\n\n"
 
-    # print(output_sql)
-    # print(country_sql)
+    print(output_sql)
+    print(country_sql)
 
     question_parent_model = [inquirer.Text(
         'car_parent_model',
@@ -113,6 +49,8 @@ def main():
     )]
 
     answer_parent_model = inquirer.prompt(question_parent_model)
+
+    cursor = db_connection.cursor();
 
     sql = "SELECT `id` " \
           "FROM `mdx_kfz`.`mdx_kfz_models` " \
@@ -134,7 +72,6 @@ def main():
             ]
 
             ans_confirm_parent_model = inquirer.prompt(qn_confirm_parent_model)
-            # print(ans_confirm_parent_model)
 
             parent_model_sql = ''
 
@@ -145,7 +82,6 @@ def main():
                 parent_model_sql += "WHERE NOT EXISTS ( \n"
                 parent_model_sql += "\t" + "SELECT `modelId` FROM `mdx_kfz_model_parent` WHERE `modelId` = @ModelId AND `parentModelId` = @ModelParent \n"
                 parent_model_sql += ") LIMIT 1; \n\n"
-                # print(parent_model_sql)
 
         else:
             print('nothing found')
@@ -192,6 +128,7 @@ def main():
     with open('../outputs/new_models.sql', 'w') as fout:
         fout.write(output_sql)
 
+
 def is_set(dictionary, key):
     if dictionary.get(key):
         return True
@@ -229,9 +166,128 @@ def start_config(config):
     config_answers = inquirer.prompt(config_questions)
     config['createNewModels'] = config_answers
 
-    with open('config.json', 'w') as fout:
+    with open('../config.json', 'w') as fout:
         # saves config dict into file
         json.dump(config, fout)
+
+
+def get_database_connection(config):
+    conn_params = config['mysql']
+
+    connection = pymysql.connect(
+        host=conn_params['host'],
+        user=conn_params['user'],
+        password=conn_params['password'],
+        # db=conn_params['db'],
+        port=conn_params['port']
+    )
+
+    return connection
+
+
+def get_possible_car_brands_from_db(connection, fuzzy_brand_name):
+    cursor = connection.cursor()
+
+    sql = "SELECT `id`, `name` FROM `mdx_kfz`.`mdx_kfz_herst` " \
+          "WHERE `name` " \
+          "LIKE '%" + fuzzy_brand_name + "%';"
+
+    cursor.execute(sql)
+    result = cursor.fetchall()
+
+    return result
+
+
+def get_possible_car_countries_from_db(connection, fuzzy_country_names='China'):
+    cursor = connection.cursor()
+
+    fuzzy_country_names = fuzzy_country_names.replace(',', '|')
+
+    sql = "SELECT `id`, `name` " \
+          "FROM `mdxcnt`.`mdx_countries` " \
+          "WHERE `name` REGEXP '" + fuzzy_country_names + "' " \
+             "OR `iso` REGEXP '" + fuzzy_country_names + "' " \
+             "OR `iso3` REGEXP '" + fuzzy_country_names + "';"
+
+    cursor.execute(sql)
+    result = cursor.fetchall()
+
+    return result
+
+
+def get_exact_car_brand_id(possible_car_brands):
+    question_to_ask = 'Which is the Brand of Car?'
+    return get_exact_answers(possible_car_brands, question_to_ask)
+
+
+def get_exact_car_country_ids(possible_countries):
+    question_to_ask = 'Select countries which will have these models?'
+    return get_exact_answers(possible_countries, question_to_ask, 'multiple')
+
+
+def get_exact_answers(possible_answers, qn, qn_type='single', required=True):
+    tmp_choices = []
+    tmp_dict = {}
+
+    for answer in possible_answers:
+        tmp_choices.append(answer[1])
+        tmp_dict[answer[1]] = answer[0]
+
+    if qn_type is not 'single':
+        question = [inquirer.Checkbox(
+            'tmp_answer',
+            message=qn,
+            choices=tmp_choices
+        )]
+    else:
+        question = [inquirer.List(
+            'tmp_answer',
+            message=qn,
+            choices=tmp_choices
+        )]
+
+    answer = inquirer.prompt(question)
+
+    if required:
+        while not answer:
+            answer = inquirer.prompt(question)
+
+    ans_list = []
+
+    if qn_type is not 'single':
+        for choice in answer['tmp_answer']:
+            item_dict = {'selection': str(choice), 'value': str(tmp_dict[choice])}
+            ans_list.append(item_dict)
+        return ans_list
+
+    return str(tmp_dict[answer['tmp_answer']])
+
+
+def input_car_brand():
+    question = 'What is the Brand of Car?'
+    return input_single_text_question(question)
+
+
+def input_car_countries():
+    question = 'Which countries would you like to add? Comma separate for multiple values.'
+    return input_single_text_question(question)
+
+
+def input_single_text_question(question, required=True):
+    question = [
+        inquirer.Text(
+            'temp_answer',
+            message=question
+        )
+    ]
+
+    answer = inquirer.prompt(question)
+
+    if required:
+        while not answer:
+            answer = inquirer.prompt(question)
+
+    return answer['temp_answer']
 
 
 if __name__ == '__main__':
