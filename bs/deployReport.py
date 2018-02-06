@@ -8,7 +8,7 @@ from email.mime.text import MIMEText
 
 DEV_MODE = False
 
-with open('config.json') as json_data_file:
+with open('../config.json') as json_data_file:
     config = json.load(json_data_file)
 
 conf_jira = config["jira"]
