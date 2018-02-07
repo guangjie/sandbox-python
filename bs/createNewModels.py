@@ -16,13 +16,13 @@ def main():
 
     db_connection = get_database_connection(config)
 
-    possible_car_brands = get_possible_car_brands_from_db(db_connection, fuzzy_car_brand)
+    possible_car_brands = get_possible_car_brands_from_db(settings, db_connection, fuzzy_car_brand)
 
     exact_car_brand_id = get_exact_car_brand_id(possible_car_brands)
 
     fuzzy_comma_separated_car_countries = input_car_countries()
 
-    possible_countries = get_possible_car_countries_from_db(db_connection, fuzzy_comma_separated_car_countries)
+    possible_countries = get_possible_car_countries_from_db(settings, db_connection, fuzzy_comma_separated_car_countries)
 
     exact_car_countries = get_exact_car_country_ids(possible_countries)
 
@@ -30,11 +30,11 @@ def main():
 
     fuzzy_car_parent_ident_code = input_car_parent_model()
 
-    possible_car_parent_ident_code = get_possible_car_parent_ident_code_from_db(db_connection, fuzzy_car_parent_ident_code, exact_car_brand_id)
+    possible_car_parent_ident_code = get_possible_car_parent_ident_code_from_db(settings, db_connection, fuzzy_car_parent_ident_code, exact_car_brand_id)
 
     exact_car_parent_ident_code = get_exact_car_parent_model(possible_car_parent_ident_code)
 
-    parent_model = get_parent_model_from_db(db_connection, exact_car_parent_ident_code)
+    parent_model = get_parent_model_from_db(settings, db_connection, exact_car_parent_ident_code)
 
     ans_confirm_parent_model = {}
     ans_confirm_parent_model['confirm_parent'] = False
@@ -121,10 +121,10 @@ def get_database_connection(config):
     return connection
 
 
-def get_possible_car_brands_from_db(connection, fuzzy_brand_name):
+def get_possible_car_brands_from_db(config, connection, fuzzy_brand_name):
     cursor = connection.cursor()
 
-    sql = "SELECT `id`, `name` FROM `mdx_kfz`.`mdx_kfz_herst` "
+    sql = "SELECT `id`, `name` FROM `{}`.`{}` ".format(config['database'], config['table_brand'])
     sql += "WHERE `name` "
     sql += "LIKE '%{}%';".format(fuzzy_brand_name)
 
@@ -134,13 +134,13 @@ def get_possible_car_brands_from_db(connection, fuzzy_brand_name):
     return result
 
 
-def get_possible_car_countries_from_db(connection, fuzzy_country_names='China'):
+def get_possible_car_countries_from_db(config, connection, fuzzy_country_names='China'):
     cursor = connection.cursor()
 
     fuzzy_country_names = fuzzy_country_names.replace(',', '|')
 
     sql = "SELECT `id`, `name` "
-    sql += "FROM `mdxcnt`.`mdx_countries` "
+    sql += "FROM `{}`.`{}` ".format(config['database_cnt'], config['table_cnt_countries'])
     sql += "WHERE `name` REGEXP '{}' ".format(fuzzy_country_names)
     sql += "OR `iso` REGEXP '{}' ".format(fuzzy_country_names)
     sql += "OR `iso3` REGEXP '{}';".format(fuzzy_country_names)
@@ -151,11 +151,11 @@ def get_possible_car_countries_from_db(connection, fuzzy_country_names='China'):
     return result
 
 
-def get_possible_car_parent_ident_code_from_db(connection, fuzzy_parent_model_name, brand_id):
+def get_possible_car_parent_ident_code_from_db(config, connection, fuzzy_parent_model_name, brand_id):
     cursor = connection.cursor()
 
     sql = "SELECT `ident_code`, `name`"
-    sql += "FROM `mdx_kfz`.`mdx_kfz_models` "
+    sql += "FROM `{}`.`{}` ".format(config['database_kfz'], config['table_model'])
     sql += "WHERE `name` LIKE '%{}%' ".format(fuzzy_parent_model_name)
     sql += "AND `herst` = {};".format(brand_id)
 
@@ -165,12 +165,12 @@ def get_possible_car_parent_ident_code_from_db(connection, fuzzy_parent_model_na
     return result
 
 
-def get_parent_model_from_db(connection, parent_ident_code):
+def get_parent_model_from_db(config, connection, parent_ident_code):
     print(parent_ident_code)
     cursor = connection.cursor()
 
     sql = "SELECT `id` "
-    sql += "FROM `mdx_kfz`.`mdx_kfz_models` "
+    sql += "FROM `{}`.`{}` ".format(config['database_kfz'], config['table_model'])
     sql += "WHERE `ident_code` = '{}';".format(parent_ident_code)
 
     cursor.execute(sql)
