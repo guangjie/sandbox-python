@@ -12,51 +12,29 @@ def main():
     else:
         start_config(config)
 
-    output_sql = ''
-
-    car_brand = input_car_brand()
+    fuzzy_car_brand = input_car_brand()
 
     db_connection = get_database_connection(config)
 
-    possible_car_brands = get_possible_car_brands_from_db(db_connection, car_brand)
+    possible_car_brands = get_possible_car_brands_from_db(db_connection, fuzzy_car_brand)
 
     exact_car_brand_id = get_exact_car_brand_id(possible_car_brands)
 
-    output_sql += 'SET @HertzId = ' + exact_car_brand_id + ';' + "\n"
+    fuzzy_comma_separated_car_countries = input_car_countries()
 
-    comma_separated_car_countries = input_car_countries()
-
-    possible_countries = get_possible_car_countries_from_db(db_connection, comma_separated_car_countries)
+    possible_countries = get_possible_car_countries_from_db(db_connection, fuzzy_comma_separated_car_countries)
 
     exact_car_countries = get_exact_car_country_ids(possible_countries)
 
-    country_sql = ''
+    output_sql = prepare_output_sql(exact_car_brand_id, exact_car_countries)
 
-    for selected_country in exact_car_countries:
-        output_sql += 'SET @CountryId' + selected_country['selection'] + ' = ' + selected_country['value'] + ";\n"
-        country_sql += 'INSERT INTO `mdx_kfz_model_countries` (`id`, `countryId`) ' + "\n" \
-                       'SELECT * FROM (SELECT @ModelId, @CountryId' + selected_country['selection'].replace(' ', '') + ') AS tmp ' + "\n" \
-                       'WHERE NOT EXISTS (' + "\n" \
-                            "\t" + 'SELECT `id` FROM `mdx_kfz_model_countries` WHERE `id` = @ModelId AND `countryId` = @CountryId' + selected_country['selection'].replace(' ', '') + "\n"\
-                       ') LIMIT 1;' + "\n\n"
+    fuzzy_car_parent_ident_code = input_car_parent_model()
 
-    print(output_sql)
-    print(country_sql)
+    possible_car_parent_ident_code = get_possible_car_parent_ident_code_from_db(db_connection, fuzzy_car_parent_ident_code, exact_car_brand_id)
 
-    question_parent_model = [inquirer.Text(
-        'car_parent_model',
-        message="What is the Indent Code of the parent model? Leave empty if none."
-    )]
+    exact_car_parent_ident_code = get_exact_car_parent_model(possible_car_parent_ident_code)
 
-    answer_parent_model = inquirer.prompt(question_parent_model)
-
-    cursor = db_connection.cursor()
-
-    sql = "SELECT `id` " \
-          "FROM `mdx_kfz`.`mdx_kfz_models` " \
-          "WHERE `ident_code` = '" + answer_parent_model['car_parent_model'] + "';"
-    cursor.execute(sql)
-    parent_model = cursor.fetchall()
+    parent_model = get_parent_model_from_db(db_connection, exact_car_parent_ident_code)
 
     ans_confirm_parent_model = {}
     ans_confirm_parent_model['confirm_parent'] = False
@@ -73,60 +51,18 @@ def main():
 
             ans_confirm_parent_model = inquirer.prompt(qn_confirm_parent_model)
 
-            parent_model_sql = ''
-
             if ans_confirm_parent_model['confirm_parent'] is True:
-                parent_model_sql = "SET @ModelParent = (SELECT `id` FROM `mdx_kfz_models` WHERE `ident_code` = '" + answer_parent_model['car_parent_model'] + "');" + "\n\n"
-                parent_model_sql += "INSERT INTO `mdx_kfz_model_parent` (`modelId`, `parentModelId`) \n"
-                parent_model_sql += "SELECT * FROM (SELECT @ModelId, @ModelParent) AS tmp \n"
-                parent_model_sql += "WHERE NOT EXISTS ( \n"
-                parent_model_sql += "\t" + "SELECT `modelId` FROM `mdx_kfz_model_parent` WHERE `modelId` = @ModelId AND `parentModelId` = @ModelParent \n"
-                parent_model_sql += ") LIMIT 1; \n\n"
+                parent_model_sql = prepare_parent_model_sql(parent_model)
 
         else:
             print('nothing found')
 
-    qn_new_models = [
-        inquirer.Text(
-            'car_models_name',
-            message="List the new models separated with comma"
-        ),
-        inquirer.Text(
-            'car_ident_code',
-            message="List the new model ident_code separated with comma"
-        )
-    ]
-
-    ans_new_models = {}
-    ans_new_models['car_models_name'] = ''
-    ans_new_models['car_ident_code'] = ''
-
-    while ans_new_models['car_models_name'] == '' or ans_new_models['car_ident_code'] == '':
-        ans_new_models = inquirer.prompt(qn_new_models)
-
-    dict_models = ans_new_models['car_models_name'].split(',')
-    dict_ident_codes = ans_new_models['car_ident_code'].split(',')
-    sql_models = ''
-
-    for idx_car_model, car_model in enumerate(dict_models):
-        sql_models += "SET @IdentCode = '" + str(dict_ident_codes[idx_car_model]) + "'; \n"
-        sql_models += "SET @ModelName = '" + str(car_model) + "'; \n\n"
-
-        sql_models += "INSERT INTO `mdx_kfz_models` (`herst`, `name`, `ident_code`) \n"
-        sql_models += "SELECT * FROM (SELECT @HertzId, @ModelName, @IdentCode) AS tmp \n"
-        sql_models += "WHERE NOT EXISTS ( \n"
-        sql_models += "\t SELECT `ident_code` FROM `mdx_kfz_models` WHERE `ident_code` = @IdentCode \n"
-        sql_models += ") LIMIT 1; \n\n"
-
-        sql_models += "SET @ModelId = (SELECT `id` FROM `mdx_kfz_models` WHERE `ident_code` = @IdentCode); \n\n"
-        sql_models += country_sql
-        sql_models += parent_model_sql
+    sql_models = prepare_full_model_sql()
 
     output_sql += sql_models
     print(output_sql)
 
-    with open('../outputs/new_models.sql', 'w') as fout:
-        fout.write(output_sql)
+    prepare_sql_file(output_sql)
 
 
 def is_set(dictionary, key):
@@ -215,6 +151,34 @@ def get_possible_car_countries_from_db(connection, fuzzy_country_names='China'):
     return result
 
 
+def get_possible_car_parent_ident_code_from_db(connection, fuzzy_parent_model_name, brand_id):
+    cursor = connection.cursor()
+
+    sql = "SELECT `ident_code`, `name`"
+    sql += "FROM `mdx_kfz`.`mdx_kfz_models` "
+    sql += "WHERE `name` LIKE '%{}%' ".format(fuzzy_parent_model_name)
+    sql += "AND `herst` = {};".format(brand_id)
+
+    cursor.execute(sql)
+    result = cursor.fetchall()
+
+    return result
+
+
+def get_parent_model_from_db(connection, parent_ident_code):
+    print(parent_ident_code)
+    cursor = connection.cursor()
+
+    sql = "SELECT `id` "
+    sql += "FROM `mdx_kfz`.`mdx_kfz_models` "
+    sql += "WHERE `ident_code` = '{}';".format(parent_ident_code)
+
+    cursor.execute(sql)
+    result = cursor.fetchall()
+
+    return result
+
+
 def get_exact_car_brand_id(possible_car_brands):
     question_to_ask = 'Which is the Brand of Car?'
     return get_exact_answers(possible_car_brands, question_to_ask)
@@ -223,6 +187,11 @@ def get_exact_car_brand_id(possible_car_brands):
 def get_exact_car_country_ids(possible_countries):
     question_to_ask = 'Select countries which will have these models?'
     return get_exact_answers(possible_countries, question_to_ask, 'multiple')
+
+
+def get_exact_car_parent_model(possible_car_parent_models):
+    question_to_ask = 'Which is the ident_code for the Parent?'
+    return get_exact_answers(possible_car_parent_models, question_to_ask)
 
 
 def get_exact_answers(possible_answers, qn, qn_type='single', required=True):
@@ -264,13 +233,28 @@ def get_exact_answers(possible_answers, qn, qn_type='single', required=True):
 
 
 def input_car_brand():
-    question = 'What is the Brand of Car?'
+    question = "What is the Brand of Car?"
     return input_single_text_question(question)
 
 
 def input_car_countries():
-    question = 'Which countries would you like to add? Comma separate for multiple values.'
+    question = "Which countries would you like to add? Comma separate for multiple values."
     return input_single_text_question(question)
+
+
+def input_car_parent_model():
+    question = "What is the Indent Code of the parent model? Leave empty if none."
+    return input_single_text_question(question)
+
+
+def input_new_car_models():
+    question = "List the new models separated with comma."
+    return question
+
+
+def input_new_ident_codes():
+    question = "List the new model ident_code separated with comma."
+    return question
 
 
 def input_single_text_question(question, required=True):
@@ -288,6 +272,80 @@ def input_single_text_question(question, required=True):
             answer = inquirer.prompt(question)
 
     return answer['temp_answer']
+
+
+def prepare_output_sql(car_brand_id, exact_car_countries):
+    output_sql = "SET @HertzId = {}; \n".format(car_brand_id)
+    country_sql = ''
+
+    for selected_country in exact_car_countries:
+        output_sql += "SET @CountryId{} = {};\n".format(selected_country['selection'], selected_country['value'])
+        country_sql += prepare_country_sql(selected_country['selection'])
+
+    output_sql += country_sql
+    return output_sql
+
+
+def prepare_country_sql(country_name):
+    stripped_country_name = country_name.replace(' ', '')
+
+    output_sql = "INSERT INTO `mdx_kfz_model_countries` (`id`, `countryId`) \n"
+    output_sql += "SELECT * FROM (SELECT @ModelId, @CountryId{}) AS tmp \n".format(stripped_country_name)
+    output_sql += "WHERE NOT EXISTS ( \n"
+    output_sql += "\t SELECT `id` FROM `mdx_kfz_model_countries` \n"
+    output_sql += "\t WHERE `id` = @ModelId AND `countryId` = @CountryId{} \n".format(stripped_country_name)
+    output_sql += ") LIMIT 1; \n\n"
+
+    return output_sql
+
+
+def prepare_parent_model_sql(parent_model):
+    output_sql = "SET @ModelParent = (SELECT `id` FROM `mdx_kfz_models` WHERE `ident_code` = '{}'); \n\n".format(parent_model)
+    output_sql += "INSERT INTO `mdx_kfz_model_parent` (`modelId`, `parentModelId`) \n"
+    output_sql += "SELECT * FROM (SELECT @ModelId, @ModelParent) AS tmp \n"
+    output_sql += "WHERE NOT EXISTS ( \n"
+    output_sql += "\t" + "SELECT `modelId` FROM `mdx_kfz_model_parent` WHERE `modelId` = @ModelId AND `parentModelId` = @ModelParent \n"
+    output_sql += ") LIMIT 1; \n\n"
+
+    return output_sql
+
+
+def prepare_model_sql(ident_code, car_model):
+    output_sql = "SET @IdentCode = '{}'; \n".format(ident_code)
+    output_sql += "SET @ModelName = '{}'; \n\n".format(car_model)
+
+    output_sql += "INSERT INTO `mdx_kfz_models` (`herst`, `name`, `ident_code`) \n"
+    output_sql += "SELECT * FROM (SELECT @HertzId, @ModelName, @IdentCode) AS tmp \n"
+    output_sql += "WHERE NOT EXISTS ( \n"
+    output_sql += "\t SELECT `ident_code` FROM `mdx_kfz_models` WHERE `ident_code` = @IdentCode \n"
+    output_sql += ") LIMIT 1; \n\n"
+
+    output_sql += "SET @ModelId = (SELECT `id` FROM `mdx_kfz_models` WHERE `ident_code` = @IdentCode); \n\n"
+
+    return output_sql
+
+
+def prepare_full_model_sql():
+    new_car_model_names = input_new_car_models()
+    new_car_ident_codes = input_new_ident_codes()
+
+    output_sql = ''
+
+    dict_models = new_car_model_names.split(',')
+    dict_ident_codes = new_car_ident_codes.split(',')
+
+    for idx_car_model, car_model in enumerate(dict_models):
+        str_ident_code = str(dict_ident_codes[idx_car_model])
+        str_car_model = str(car_model)
+
+        output_sql += prepare_model_sql(str_ident_code, str_car_model)
+
+    return output_sql
+
+
+def prepare_sql_file(output_sql):
+    with open('../outputs/new_models.sql', 'w') as fout:
+        fout.write(output_sql)
 
 
 if __name__ == '__main__':
