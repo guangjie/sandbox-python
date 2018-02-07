@@ -74,15 +74,23 @@ def is_set(dictionary, key):
 def start_config(config):
     config_questions = [
         inquirer.Text(
-            'database',
-            message="What is the Database Name?"
+            'database_kfz',
+            message="What is the Vehicle Database Name?"
+        ),
+        inquirer.Text(
+            'database_cnt',
+            message="What is the CNT Database Name?"
+        ),
+        inquirer.Text(
+            'table_brand',
+            message="What is the CNT Country Tablename?"
         ),
         inquirer.Text(
             'table_brand',
             message="What is the Vehicle Brand Tablename?"
         ),
         inquirer.Text(
-            'table_model',
+            'table_model_brand',
             message="What is the Vehicle Model Tablename?"
         ),
         inquirer.Text(
