@@ -124,9 +124,9 @@ def get_database_connection(config):
 def get_possible_car_brands_from_db(connection, fuzzy_brand_name):
     cursor = connection.cursor()
 
-    sql = "SELECT `id`, `name` FROM `mdx_kfz`.`mdx_kfz_herst` " \
-          "WHERE `name` " \
-          "LIKE '%" + fuzzy_brand_name + "%';"
+    sql = "SELECT `id`, `name` FROM `mdx_kfz`.`mdx_kfz_herst` "
+    sql += "WHERE `name` "
+    sql += "LIKE '%{}%';".format(fuzzy_brand_name)
 
     cursor.execute(sql)
     result = cursor.fetchall()
@@ -139,11 +139,11 @@ def get_possible_car_countries_from_db(connection, fuzzy_country_names='China'):
 
     fuzzy_country_names = fuzzy_country_names.replace(',', '|')
 
-    sql = "SELECT `id`, `name` " \
-          "FROM `mdxcnt`.`mdx_countries` " \
-          "WHERE `name` REGEXP '" + fuzzy_country_names + "' " \
-             "OR `iso` REGEXP '" + fuzzy_country_names + "' " \
-             "OR `iso3` REGEXP '" + fuzzy_country_names + "';"
+    sql = "SELECT `id`, `name` "
+    sql += "FROM `mdxcnt`.`mdx_countries` "
+    sql += "WHERE `name` REGEXP '{}' ".format(fuzzy_country_names)
+    sql += "OR `iso` REGEXP '{}' ".format(fuzzy_country_names)
+    sql += "OR `iso3` REGEXP '{}';".format(fuzzy_country_names)
 
     cursor.execute(sql)
     result = cursor.fetchall()
